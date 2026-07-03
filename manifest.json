@@ -11,7 +11,7 @@
     {
       "name": "gpt-rag-orchestrator",
       "repo": "https://github.com/azure/gpt-rag-orchestrator.git",
-      "tag": "v3.1.0"
+      "tag": "v3.1.1"
     },
     {
       "name": "gpt-rag-ingestion",
