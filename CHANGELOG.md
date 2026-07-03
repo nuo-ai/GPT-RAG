@@ -4,9 +4,9 @@
 
 ### User and operator impact
 
-Foundry IQ deployments using Pattern A (`FOUNDRY_IQ_PATTERN=azureBlob`) can now also serve documents that users upload through the chat UI, in the same conversation, without switching retrieval backends. When you turn the feature on, the search setup provisions a second, conversational knowledge source over the existing RAG index (`ragindex-<token>`) and adds it to the Foundry IQ knowledge base. Uploaded files are indexed with a `conversationId`, and the orchestrator (pinned here to [`v3.1.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.1.0)) scopes that conversational source per conversation at query time, so one user's upload never leaks into another conversation.
+Foundry IQ deployments using Pattern A (`FOUNDRY_IQ_PATTERN=azureBlob`) can now also serve documents that users upload through the chat UI, in the same conversation, without switching retrieval backends. When you turn the feature on, the search setup provisions a second, conversational knowledge source over the existing RAG index (`ragindex-<token>`) and adds it to the Foundry IQ knowledge base. Uploaded files are indexed with a `conversationId`, and the orchestrator (pinned here to [`v3.1.1`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.1.1)) scopes that conversational source per conversation at query time, so one user's upload never leaks into another conversation.
 
-The feature is opt-in and defaults to off. Set `FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED=true` before `azd provision` to enable it. With the flag off (the default), the rendered search resources and deployed behavior are identical to `v3.1.0`, so existing environments upgrade with no change. The feature only applies to Pattern A; the `searchIndex` pattern (Pattern B) never adds the conversational source because file upload already works there.
+The feature is opt-in and defaults to off. Set `FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED=true` before `azd provision` to enable it. With the flag off (the default), the rendered search resources and deployed behavior are identical to GPT-RAG `v3.1.0` defaults, so existing environments upgrade with no change. The feature only applies to Pattern A; the `searchIndex` pattern (Pattern B) never adds the conversational source because file upload already works there.
 
 Fresh deployments also consume [AI Landing Zone `v2.3.0`](https://github.com/Azure/bicep-ptn-aiml-landing-zone/releases/tag/v2.3.0), which adds a generic App Configuration passthrough so accelerators can push their own settings into App Config without the landing zone needing to know about them.
 
@@ -19,7 +19,7 @@ Fresh deployments also consume [AI Landing Zone `v2.3.0`](https://github.com/Azu
 ### Changed
 
 - **AI Landing Zone Bicep module pin bumped to [`v2.3.0`](https://github.com/Azure/bicep-ptn-aiml-landing-zone/releases/tag/v2.3.0):** `manifest.json`, `.gitmodules`, and the `infra` submodule HEAD are aligned on the landing-zone release that adds the generic App Configuration passthrough.
-- **Orchestrator pin bumped to [`v3.1.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.1.0):** carries the hybrid multi-source retrieval that reads the conversational knowledge source and applies the per-`conversationId` filter add-on at query time. Required for conversational file upload to work end to end.
+- **Orchestrator pin bumped to [`v3.1.1`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.1.1):** carries the hybrid multi-source retrieval from `v3.1.0` plus the `filterAddOn` format fix from `v3.1.1`, so the conversational knowledge source is scoped with `conversationId eq '<conversation-id>'` at query time. Required for conversational file upload to work end to end.
 
 ### Validation
 
@@ -31,7 +31,7 @@ The following component versions are pinned for this release:
 | Component | Version |
 | --- | --- |
 | gpt-rag-ui | v2.3.13 |
-| gpt-rag-orchestrator | v3.1.0 |
+| gpt-rag-orchestrator | v3.1.1 |
 | gpt-rag-ingestion | v2.4.14 |
 | bicep-ptn-aiml-landing-zone | v2.3.0 |
 
