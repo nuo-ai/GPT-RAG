@@ -78,7 +78,7 @@ For the full operator guide, including how the two Foundry IQ ingestion patterns
 
 ## AI Agent Capabilities
 
-The accelerator supports a broad range of enterprise scenarios—from customer support to decision automation—by enabling systems to process complex queries across large data collections. It is designed for seamless integration into existing environments and can be adapted to both straightforward and advanced operational patterns.
+The accelerator supports a broad range of enterprise scenarios, from customer support to decision automation, by enabling systems to process complex queries across large data collections. It is designed for seamless integration into existing environments and can be adapted to both straightforward and advanced operational patterns.
 
 A key capability of GPT-RAG is its support for **AI Agents**, enabling scenarios such as **NL2SQL query generation** and other context-aware interactions. This extensibility allows organizations to build intelligent workflows that retrieve, interpret, and act on data with contextual precision.
 
