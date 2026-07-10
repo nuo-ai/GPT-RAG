@@ -1,5 +1,55 @@
 # Changelog
 
+## [v3.4.0] - 2026-07-10
+
+### User and operator impact
+
+Foundry IQ deployments can now optionally include **Microsoft Fabric ontology** as an additional knowledge source on the shared knowledge base, so retrieval can ground answers in a Fabric semantic model, lakehouse, warehouse, or KQL database exposed through the ontology, alongside existing RAG documents and Work IQ. The feature is opt-in and defaults to off. Set `FABRIC_IQ_ENABLED=true` and pick `FABRIC_IQ_KNOWLEDGE_SOURCE_NAME`, `FABRIC_IQ_WORKSPACE_ID`, and `FABRIC_IQ_ONTOLOGY_ID` before `azd provision` to enable it. With the flag off (the default), the rendered search resources and deployed behavior are identical to `v3.3.0` defaults, so existing environments upgrade with no change.
+
+Enabling Fabric IQ requires: a Microsoft Fabric workspace with an ontology item, tenant-level Fabric ontology enablement, Fabric-licensed end users, and the same Entra tenant as the Foundry / Search resource. ACL is enforced natively by Fabric via the forwarded per-user OBO token (same `x-ms-query-source-authorization` header used by Work IQ). Managed-identity fallback is never used for the remote `fabricOntology` kind: when the OBO token is missing, the Fabric IQ source is skipped with a clear warning and local sources still serve the request.
+
+**Data-egress caveat:** Fabric IQ forwards the caller's OBO token to Microsoft Fabric and returns grounded snippets from ontology-exposed Fabric data back to the orchestrator. Operators enabling Fabric IQ should confirm this data-flow is compliant with their tenant's data-boundary and Fabric-workspace access policies before turning the flag on. Grounded content still ends up in orchestrator responses and, transitively, in downstream telemetry and chat history.
+
+The paired orchestrator release [`v3.3.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.3.0) adds the runtime settings `FABRIC_IQ_ENABLED`, `FABRIC_IQ_KNOWLEDGE_SOURCE_NAME`, `FABRIC_IQ_WORKSPACE_ID`, and `FABRIC_IQ_ONTOLOGY_ID`, plus the Fabric IQ retrieve wiring (`kind=fabricOntology` with preview API `2026-05-01-preview`). `manifest.json` is pinned to that release.
+
+### Added
+
+- **Fabric IQ (Microsoft Fabric ontology) knowledge source support (opt-in, default off).**
+  Foundry IQ deployments can now optionally include a Microsoft Fabric
+  ontology as an additional knowledge source on the shared knowledge base,
+  so retrieval can ground answers in a Fabric semantic model, lakehouse,
+  warehouse, or KQL database exposed through the ontology, alongside
+  existing RAG documents and Work IQ. Feature is opt-in via the App
+  Configuration keys `FABRIC_IQ_ENABLED`, `FABRIC_IQ_KNOWLEDGE_SOURCE_NAME`,
+  `FABRIC_IQ_WORKSPACE_ID`, and `FABRIC_IQ_ONTOLOGY_ID`. With the flag off
+  (the default), the rendered search resources and deployed behavior are
+  identical to the `v3.3.0` defaults, so existing environments upgrade with
+  no change. Requires a Microsoft Fabric workspace with an ontology item,
+  tenant-level Fabric ontology enablement, Fabric-licensed end users, and
+  the same Entra tenant as the Foundry / Search resource. See
+  [`Azure/gpt-rag#543`](https://github.com/Azure/gpt-rag/issues/543).
+
+### Changed
+
+- **Orchestrator pin bumped to [`v3.3.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.3.0):** carries the Fabric IQ retrieve support (`kind=fabricOntology`), reusing the OBO header path introduced for Work IQ.
+
+### Component versions
+
+The following component versions are pinned for this release:
+
+| Component | Version |
+| --- | --- |
+| gpt-rag-ui | v2.3.13 |
+| gpt-rag-orchestrator | v3.3.0 |
+| gpt-rag-ingestion | v2.4.14 |
+| infra / AI Landing Zone | v2.3.0 |
+
+### Validation
+
+- `python -m pytest -q config/search/tests/test_foundry_iq_templates.py` passes (21 tests).
+- Landing zone: no-op for this release. The AI Landing Zone passthrough already stamps unknown App Configuration keys, so `FABRIC_IQ_*` keys flow through without any infra change.
+- Live Azure validation was performed in a throwaway Standard-mode environment: Fabric IQ default OFF confirmed regression-free (Work IQ + Blob KS chat path still green), Fabric IQ ON with a stub `workspaceId`/`ontologyId` confirmed the orchestrator starts, the `fabricOntology` knowledge source is either registered on the shared knowledge base or gracefully skipped with a clear warning, and the existing chat path continues to work.
+- **Deferred:** live end-to-end query against a real Fabric ontology workspace. The current validation subscription cannot provision Fabric, so live-query validation is deferred to a follow-up run in a Fabric-capable tenant. Fabric IQ is opt-in and defaults off, so this deferral does not affect operators who don't turn the flag on.
 ## [v3.3.0] - 2026-07-10
 
 ### User and operator impact
