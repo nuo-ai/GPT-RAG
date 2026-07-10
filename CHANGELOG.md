@@ -4,6 +4,21 @@
 
 ### Added
 
+- **Fabric IQ (Microsoft Fabric ontology) knowledge source support (opt-in, default off).**
+  Foundry IQ deployments can now optionally include a Microsoft Fabric
+  ontology as an additional knowledge source on the shared knowledge base,
+  so retrieval can ground answers in a Fabric semantic model, lakehouse,
+  warehouse, or KQL database exposed through the ontology, alongside
+  existing RAG documents and Work IQ. Feature is opt-in via the App
+  Configuration keys `FABRIC_IQ_ENABLED`, `FABRIC_IQ_KNOWLEDGE_SOURCE_NAME`,
+  `FABRIC_IQ_WORKSPACE_ID`, and `FABRIC_IQ_ONTOLOGY_ID`. With the flag off
+  (the default), the rendered search resources and deployed behavior are
+  identical to the `v3.3.0` defaults, so existing environments upgrade with
+  no change. Requires a Microsoft Fabric workspace with an ontology item,
+  tenant-level Fabric ontology enablement, Fabric-licensed end users, and
+  the same Entra tenant as the Foundry / Search resource. See
+  [`Azure/gpt-rag#543`](https://github.com/Azure/gpt-rag/issues/543).
+
 ### Changed
 
 ### Fixed

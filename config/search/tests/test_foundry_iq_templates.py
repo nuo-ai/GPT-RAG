@@ -417,6 +417,72 @@ class WorkIqTemplateTests(unittest.TestCase):
         self.assertEqual(search_definitions["knowledgeSources"], [])
         self.assertEqual(search_definitions["knowledgeBases"], [])
 
+    def test_settings_defaults_fabric_iq_disabled_and_empty(self):
+        settings = render_json_template(
+            "search.settings.j2",
+            {
+                "RESOURCE_TOKEN": "abc123",
+                "SEARCH_SERVICE_QUERY_ENDPOINT": "https://search.search.windows.net",
+                "AI_FOUNDRY_ACCOUNT_NAME": "aif-abc123",
+                "RETRIEVAL_BACKEND": "foundry_iq",
+            },
+        )
+        self.assertEqual(settings["FABRIC_IQ_ENABLED"], "false")
+        self.assertEqual(settings["FABRIC_IQ_KNOWLEDGE_SOURCE_NAME"], "")
+        self.assertEqual(settings["FABRIC_IQ_WORKSPACE_ID"], "")
+        self.assertEqual(settings["FABRIC_IQ_ONTOLOGY_ID"], "")
+
+    def test_fabric_iq_disabled_by_default_produces_no_fabric_entry(self):
+        _, context = self._foundry_iq_context()
+        search_definitions = render_json_template("search.j2", context)
+        for ks in search_definitions["knowledgeSources"]:
+            self.assertNotEqual(ks["kind"], "fabricOntology")
+        kb_source_names = [
+            s["name"] for s in search_definitions["knowledgeBases"][0]["knowledgeSources"]
+        ]
+        self.assertNotIn("fabric-iq-ks", kb_source_names)
+
+    def test_fabric_iq_enabled_without_binding_fields_produces_no_entry(self):
+        # Enabled + name but missing workspace and ontology ids must not emit.
+        _, context = self._foundry_iq_context(
+            FABRIC_IQ_ENABLED="true",
+            FABRIC_IQ_KNOWLEDGE_SOURCE_NAME="fabric-iq-ks",
+        )
+        search_definitions = render_json_template("search.j2", context)
+        for ks in search_definitions["knowledgeSources"]:
+            self.assertNotEqual(ks["kind"], "fabricOntology")
+
+    def test_fabric_iq_enabled_adds_fabric_knowledge_source_and_kb_reference(self):
+        _, context = self._foundry_iq_context(
+            FABRIC_IQ_ENABLED="true",
+            FABRIC_IQ_KNOWLEDGE_SOURCE_NAME="fabric-iq-ks",
+            FABRIC_IQ_WORKSPACE_ID="ws-guid-1",
+            FABRIC_IQ_ONTOLOGY_ID="ont-guid-1",
+        )
+        search_definitions = render_json_template("search.j2", context)
+
+        fabric_sources = [
+            ks
+            for ks in search_definitions["knowledgeSources"]
+            if ks["kind"] == "fabricOntology"
+        ]
+        self.assertEqual(len(fabric_sources), 1)
+        fabric = fabric_sources[0]
+        self.assertEqual(fabric["name"], "fabric-iq-ks")
+        self.assertEqual(fabric["kind"], "fabricOntology")
+        self.assertIsNone(fabric["encryptionKey"])
+        # Fabric IQ is service-managed. It must not carry a filterAddOn.
+        self.assertNotIn("filterAddOn", fabric)
+        self.assertEqual(
+            fabric["fabricOntologyParameters"],
+            {"workspaceId": "ws-guid-1", "ontologyId": "ont-guid-1"},
+        )
+
+        kb_source_names = [
+            s["name"] for s in search_definitions["knowledgeBases"][0]["knowledgeSources"]
+        ]
+        self.assertIn("fabric-iq-ks", kb_source_names)
+
 
 class WorkIqPreflightTests(unittest.TestCase):
     def test_filter_work_iq_sources_no_op_when_disabled(self):

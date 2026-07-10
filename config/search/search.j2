@@ -3,6 +3,7 @@
 {% set is_content_understanding_chat_model_supported = GPT_MODEL_INFO and GPT_MODEL_INFO.model_name in content_understanding_chat_models %}
 {% set conversation_upload_enabled = RETRIEVAL_BACKEND == 'foundry_iq' and FOUNDRY_IQ_PATTERN != 'searchIndex' and (FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED | default('false') | string | lower) in ['true', '1', 'yes', 'y', 't'] and (FOUNDRY_IQ_CONVERSATION_KNOWLEDGE_SOURCE_NAME | default('', true)) %}
 {% set work_iq_enabled = RETRIEVAL_BACKEND == 'foundry_iq' and (WORK_IQ_ENABLED | default('false') | string | lower) in ['true', '1', 'yes', 'y', 't'] and (WORK_IQ_KNOWLEDGE_SOURCE_NAME | default('', true)) %}
+{% set fabric_iq_enabled = RETRIEVAL_BACKEND == 'foundry_iq' and (FABRIC_IQ_ENABLED | default('false') | string | lower) in ['true', '1', 'yes', 'y', 't'] and (FABRIC_IQ_KNOWLEDGE_SOURCE_NAME | default('', true)) and (FABRIC_IQ_WORKSPACE_ID | default('', true)) and (FABRIC_IQ_ONTOLOGY_ID | default('', true)) %}
 {
   "indexes": [
     {
@@ -420,6 +421,18 @@
       "encryptionKey": null
     }
     {% endif %}
+    {% if fabric_iq_enabled %},
+    {
+      "name": "{{FABRIC_IQ_KNOWLEDGE_SOURCE_NAME}}",
+      "kind": "fabricOntology",
+      "description": "Microsoft Fabric IQ knowledge source (grounds retrieval on a Fabric ontology in the caller's workspace).",
+      "fabricOntologyParameters": {
+        "workspaceId": "{{FABRIC_IQ_WORKSPACE_ID}}",
+        "ontologyId": "{{FABRIC_IQ_ONTOLOGY_ID}}"
+      },
+      "encryptionKey": null
+    }
+    {% endif %}
   ]{% else %}[]{% endif %},
   "knowledgeBases": {% if RETRIEVAL_BACKEND == 'foundry_iq' %}[
     {
@@ -431,7 +444,8 @@
       "knowledgeSources": [
         { "name": "{{FOUNDRY_IQ_KNOWLEDGE_SOURCE_NAME}}" }{% if conversation_upload_enabled %},
         { "name": "{{FOUNDRY_IQ_CONVERSATION_KNOWLEDGE_SOURCE_NAME}}" }{% endif %}{% if work_iq_enabled %},
-        { "name": "{{WORK_IQ_KNOWLEDGE_SOURCE_NAME}}" }{% endif %}
+        { "name": "{{WORK_IQ_KNOWLEDGE_SOURCE_NAME}}" }{% endif %}{% if fabric_iq_enabled %},
+        { "name": "{{FABRIC_IQ_KNOWLEDGE_SOURCE_NAME}}" }{% endif %}
       ],
       "models": [],
       "encryptionKey": null,
