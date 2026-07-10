@@ -1,5 +1,140 @@
 # Changelog
 
+## [v3.3.0] - 2026-07-10
+
+### User and operator impact
+
+Foundry IQ deployments can now optionally include **Microsoft 365 Work IQ** as an additional knowledge source on the shared knowledge base, so retrieval can ground answers in the signed-in user's Microsoft 365 context alongside the existing RAG documents. The feature is opt-in and defaults to off. Set `WORK_IQ_ENABLED=true` and pick a `WORK_IQ_KNOWLEDGE_SOURCE_NAME` before `azd provision` to enable it. With the flag off (the default), the rendered search resources and deployed behavior are identical to `v3.2.0` defaults, so existing environments upgrade with no change.
+
+Enabling Work IQ requires a tenant-level prerequisite: the `EnableFoundryIQWithWorkIQ` feature flag, admin consent for the Work IQ service principal (appId `fdcc1f02-fc51-4226-8753-f668596af7f7`) submitted through the [admin consent form](https://aka.ms/foundry-iq-work-iq-admin-consent-form), and a Microsoft 365 Copilot license for end users. See [`Azure/gpt-rag#543`](https://github.com/Azure/gpt-rag/issues/543) for the full proposal. The setup script runs a soft preflight against Microsoft Graph: when Work IQ is enabled but consent has not been granted, the script prints a warning explaining the prerequisites and skips only the Work IQ knowledge source (the rest of the deployment continues), so operators can enable the flag ahead of consent without breaking the environment.
+
+The paired orchestrator release [`v3.2.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.2.0) adds the runtime settings `WORK_IQ_ENABLED`, `WORK_IQ_KNOWLEDGE_SOURCE_NAME`, and `FOUNDRY_IQ_MAX_RUNTIME_SECONDS`, plus the reference-normalization seam for remote knowledge source shapes. `manifest.json` is pinned to that release.
+
+### Added
+
+- **Optional Work IQ knowledge source for Foundry IQ:** When `RETRIEVAL_BACKEND=foundry_iq`, `WORK_IQ_ENABLED=true`, and `WORK_IQ_KNOWLEDGE_SOURCE_NAME` is set, `config/search/search.j2` renders an additional `workIQ` knowledge source (no `filterAddOn`) and references it from the knowledge base alongside the existing sources.
+- **New passthrough settings:** `config/search/search.settings.j2` stamps `WORK_IQ_ENABLED` (default `false`) and `WORK_IQ_KNOWLEDGE_SOURCE_NAME` (default `""`) into App Configuration under the `gpt-rag` label, so both new and upgraded environments always carry the keys.
+- **Soft admin-consent preflight:** `config/search/setup.py` gained `check_work_iq_admin_consent` and `filter_work_iq_sources`. When Work IQ is enabled, the setup script probes Microsoft Graph for the Work IQ service principal, logs the enablement prerequisites when consent is missing or the check is inconclusive, and skips just the Work IQ knowledge source instead of failing the deployment.
+- **Template tests:** `config/search/tests/test_foundry_iq_templates.py` now covers Work IQ default-off (no `workIQ` entry emitted), enabled without a name (still no entry), enabled with a name (emits a `workIQ` source with no `filterAddOn` and adds the name to the knowledge base), and Work IQ ignored when `RETRIEVAL_BACKEND` is not `foundry_iq`. The preflight filter is tested for the disabled, consented, not-consented, and inconclusive paths.
+
+### Changed
+
+- **Orchestrator pin bumped to [`v3.2.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.2.0):** carries the Work IQ retrieve support (`kind="workIQ"`), the `maxRuntimeInSeconds` header plumbing (default 120 seconds, overridable via `FOUNDRY_IQ_MAX_RUNTIME_SECONDS`), and the reference-normalization seam for the Work IQ `sourceData` shape.
+
+### Component versions
+
+The following component versions are pinned for this release:
+
+| Component | Version |
+| --- | --- |
+| gpt-rag-ui | v2.3.13 |
+| gpt-rag-orchestrator | v3.2.0 |
+| gpt-rag-ingestion | v2.4.14 |
+| infra / AI Landing Zone | v2.3.0 |
+
+### Validation
+
+- `python -m pytest -q config/search/tests/test_foundry_iq_templates.py` passes (17 tests).
+- With `WORK_IQ_ENABLED` unset or `false`, the rendered `search.j2` JSON is identical to `v3.2.0` (no `workIQ` knowledge source, no additional knowledge base reference), so default deployments are byte-identical.
+
+## [v3.2.0] - 2026-07-02
+
+### User and operator impact
+
+Foundry IQ deployments using Pattern A (`FOUNDRY_IQ_PATTERN=azureBlob`) can now also serve documents that users upload through the chat UI, in the same conversation, without switching retrieval backends. When you turn the feature on, the search setup provisions a second, conversational knowledge source over the existing RAG index (`ragindex-<token>`) and adds it to the Foundry IQ knowledge base. Uploaded files are indexed with a `conversationId`, and the orchestrator (pinned here to [`v3.1.1`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.1.1)) scopes that conversational source per conversation at query time, so one user's upload never leaks into another conversation.
+
+The feature is opt-in and defaults to off. Set `FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED=true` before `azd provision` to enable it. With the flag off (the default), the rendered search resources and deployed behavior are identical to GPT-RAG `v3.1.0` defaults, so existing environments upgrade with no change. The feature only applies to Pattern A; the `searchIndex` pattern (Pattern B) never adds the conversational source because file upload already works there.
+
+Fresh deployments also consume [AI Landing Zone `v2.3.0`](https://github.com/Azure/bicep-ptn-aiml-landing-zone/releases/tag/v2.3.0), which adds a generic App Configuration passthrough so accelerators can push their own settings into App Config without the landing zone needing to know about them.
+
+### Added
+
+- **Conversational file upload knowledge source for Foundry IQ Pattern A:** When `RETRIEVAL_BACKEND=foundry_iq`, the pattern is not `searchIndex`, and `FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED=true`, `config/search/search.j2` renders a second `searchIndex` knowledge source over `SEARCH_RAG_INDEX_NAME` (semantic config `semantic-config`) and references it from the knowledge base alongside the primary `azureBlob` source. The conversational source name defaults to `<ragIndexName>-conv-ks` and can be overridden with `FOUNDRY_IQ_CONVERSATION_KNOWLEDGE_SOURCE_NAME`.
+- **New passthrough settings:** `scripts/postProvision.ps1` and `config/search/search.settings.j2` stamp `FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED` (default `false`) and `FOUNDRY_IQ_CONVERSATION_KNOWLEDGE_SOURCE_NAME` (default `<ragIndexName>-conv-ks`) into App Configuration under the `gpt-rag` label, so both new and upgraded environments always carry the keys.
+- **Template tests:** `config/search/tests/test_foundry_iq_templates.py` covers the feature off (single source), on (blob plus conversational source, knowledge base references both), and the `searchIndex` pattern guard (no conversational source added).
+
+### Changed
+
+- **AI Landing Zone Bicep module pin bumped to [`v2.3.0`](https://github.com/Azure/bicep-ptn-aiml-landing-zone/releases/tag/v2.3.0):** `manifest.json`, `.gitmodules`, and the `infra` submodule HEAD are aligned on the landing-zone release that adds the generic App Configuration passthrough.
+- **Orchestrator pin bumped to [`v3.1.1`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.1.1):** carries the hybrid multi-source retrieval from `v3.1.0` plus the `filterAddOn` format fix from `v3.1.1`, so the conversational knowledge source is scoped with `conversationId eq '<conversation-id>'` at query time. Required for conversational file upload to work end to end.
+
+### Validation
+
+- `pytest config/search/tests/test_foundry_iq_templates.py` passes (8 tests), covering the conversational source on/off behavior, the knowledge base references, and the `searchIndex` pattern guard.
+- With `FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED` unset or `false`, the rendered `search.j2` output is unchanged from `v3.1.0` (single knowledge source, single knowledge base reference), so the default deployment is byte-identical.
+
+The following component versions are pinned for this release:
+
+| Component | Version |
+| --- | --- |
+| gpt-rag-ui | v2.3.13 |
+| gpt-rag-orchestrator | v3.1.1 |
+| gpt-rag-ingestion | v2.4.14 |
+| bicep-ptn-aiml-landing-zone | v2.3.0 |
+
+## [v3.1.0] - 2026-07-01
+
+### User and operator impact
+
+Fresh deployments now consume [AI Landing Zone `v2.2.0`](https://github.com/Azure/bicep-ptn-aiml-landing-zone/releases/tag/v2.2.0), which flips the default `resourceNamingMode` from `legacy` to `caf` and derives every CAF token automatically (workload from a subscription/env/location hash, environment from `AZURE_ENV_NAME`, region from a built-in abbreviation map). Fresh Basic and Zero Trust provisions therefore produce Cloud Adoption Framework-aligned resource names out of the box (for example `cosmos-<hash>-<env>-<region>-001`), without requiring operators to set `CAF_WORKLOAD_NAME`, `CAF_ENVIRONMENT_NAME`, or `CAF_REGION_NAME`. Operators who still want the pre-`v2.2.0` naming scheme can opt back in by setting `RESOURCE_NAMING_MODE=legacy` before `azd provision`.
+
+### Changed
+
+- **AI Landing Zone Bicep module pin bumped to [`v2.2.0`](https://github.com/Azure/bicep-ptn-aiml-landing-zone/releases/tag/v2.2.0):** `manifest.json`, `.gitmodules`, and the `infra` submodule HEAD are aligned on the CAF-default landing-zone release. This supersedes the interim `v2.1.6` pin.
+- **`main.parameters.json` aligned with the `v2.2.0` CAF-default contract:** `resourceNamingMode` now defaults to `caf`, and `cafWorkloadName`, `cafEnvironmentName`, and `cafRegionName` default to empty strings so the landing-zone bicep resolves them from `AZURE_ENV_NAME`, `AZURE_LOCATION`, and a subscription-scoped hash. Operators can still override every token via the same `${CAF_*_NAME=...}` environment variables.
+
+### Fixed
+
+- **Azure AI Foundry can be provisioned in a different region than the primary deployment:** `main.bicep` now exposes an `aiFoundryLocation` parameter (wired from `AZURE_AI_FOUNDRY_LOCATION`) and routes both the AI Foundry account module and its capability host through it, so deployments with `AZURE_LOCATION=<primary>` and `AZURE_AI_FOUNDRY_LOCATION=<foundry-region>` no longer force the AI Foundry account into the primary region.
+- **`scripts/postProvision.ps1` is now CAF-naming aware:** introduced an `_resolveResource` helper that queries `az resource list` per resource type (AI Foundry, Storage, Cosmos, Search, Key Vault, ACR, Container Apps Environment, Log Analytics, App Insights) and falls back to the legacy `<prefix>-<resourceToken>` derivation. Foundry project name is discovered via `az cognitiveservices account list-projects`; Cosmos DB name via `az cosmosdb sql database list`. Without this fix, post-provision failed with `ResourceNotFound` under the new `resourceNamingMode=caf` default because it assumed the legacy naming pattern. Legacy environments continue to work via the fallback.
+
+### Validation
+
+- Fresh Basic (non-Zero-Trust) provision + deploy in Australia East with AI Foundry in East US 2, `RETRIEVAL_BACKEND=foundry_iq`, and `FOUNDRY_IQ_PATTERN=searchIndex`. Post-provision resolver picked up all CAF-named resources; AI Foundry blocklist and RAI policy created against the CAF-named account; AppConfig populated with 103 keys; Search indexes plus Foundry IQ knowledge source and knowledge base created; all three container apps healthy on `--0000001` with 100% traffic; frontend fronted by Entra Easy Auth (`RedirectToLoginPage`, v2 issuer).
+- Bicep build validation (`az bicep build --file infra/main.bicep`) exited 0.
+
+The following component versions are pinned for this release:
+
+| Component | Version |
+| --- | --- |
+| gpt-rag-ui | v2.3.13 |
+| gpt-rag-orchestrator | v3.0.4 |
+| gpt-rag-ingestion | v2.4.14 |
+| bicep-ptn-aiml-landing-zone | v2.2.0 |
+
+## [v3.0.8] - 2026-06-30
+
+### User and operator impact
+
+Fresh Zero Trust deployments with Foundry IQ native Blob now provision and retrieve documents end to end. The release consumes AI Landing Zone `v2.1.5`, which fixes the primary application Search service private-link ordering for Foundry/OpenAI/Cognitive Services, and carries the GPT-RAG post-provision fixes that stamp and consume the native Blob settings required for Knowledge Source and Knowledge Base creation.
+
+### Changed
+
+- **AI Landing Zone Bicep module pin bumped to [`v2.1.5`](https://github.com/Azure/bicep-ptn-aiml-landing-zone/releases/tag/v2.1.5):** `manifest.json`, `.gitmodules`, and the `infra` submodule HEAD are aligned on the validated landing-zone release.
+- **Fresh Foundry IQ deployments now carry native Blob settings into infrastructure:** `main.parameters.json` passes `RETRIEVAL_BACKEND=foundry_iq` and the native `FOUNDRY_IQ_*` defaults through azd/Bicep so fresh Zero Trust provisions stamp App Configuration for Foundry IQ `azureBlob` instead of silently falling back to direct Azure AI Search.
+
+### Fixed
+
+- **Fresh Foundry IQ standard extraction setup now seeds required search and AI Services settings:** Post-provision search setup derives `SEARCH_RAG_INDEX_NAME` before rendering Foundry IQ knowledge resources and supplies the `aiServices.uri` / chat model resource URI required by Azure AI Search when `FOUNDRY_IQ_CONTENT_EXTRACTION_MODE=standard`.
+- **Generated Foundry IQ Blob indexers run privately under network isolation:** Search setup enforces `parameters.configuration.executionEnvironment = Private` on service-generated Blob indexers when `NETWORK_ISOLATION=true`.
+- **Regional preflight blocks unsupported Content Understanding regions:** The preflight gate rejects regions where Foundry IQ standard extraction cannot run before provisioning starts.
+
+### Validation
+
+- Full Zero Trust validation passed in Australia East with `NETWORK_ISOLATION=true`, Foundry IQ native Blob, Azure Firewall, Bastion, jumpbox, NAT Gateway, and ACR task agent pool enabled.
+- Provisioning and jumpbox post-provision completed successfully.
+- App Configuration contained `NETWORK_ISOLATION`; the Foundry IQ Knowledge Source and Knowledge Base were created; the generated Blob indexer used private execution.
+- The requested PDF was indexed through the private Blob path, the Knowledge Base index contained documents, and Knowledge Base retrieval returned references from the indexed PDF.
+
+The following component versions are pinned for this release:
+
+| Component | Version |
+| --- | --- |
+| gpt-rag-ui | v2.3.13 |
+| gpt-rag-orchestrator | v3.0.4 |
+| gpt-rag-ingestion | v2.4.14 |
+| bicep-ptn-aiml-landing-zone | v2.1.5 |
+
 ## [v3.0.7] - 2026-06-29
 
 ### User and operator impact
