@@ -28,7 +28,7 @@ GPT-RAG is built on a Zero-Trust architecture to ensure that all components oper
 Head to the documentation site for the complete guides:
 
 - **[Deployment Guide](https://azure.github.io/GPT-RAG/deploy/)** covers Basic, Zero Trust, and network-isolated deployments, preflight checks, jumpbox workflow, and container image builds.
-- **[Retrieval Backend Selection](https://azure.github.io/GPT-RAG/howto_retrieval_backend/)** covers Foundry IQ, Azure AI Search, security modes, billing, and rollback.
+- **[Grounding sources overview](https://azure.github.io/GPT-RAG/howto_grounding_overview/)** covers Foundry IQ, Azure AI Search, Work IQ, and how to pick a source. Deeper how-tos for each source are linked from the overview.
 - **[What's New](https://azure.github.io/GPT-RAG/whatisnew/)** highlights the notable features added over time.
 
 ## Architecture
