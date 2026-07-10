@@ -53,6 +53,9 @@ VARS_TEMPLATE = "search.settings.j2"
 LABEL_FILTER = "gpt-rag"
 DEFAULT_KNOWLEDGE_API_VERSION = "2026-05-01-preview"
 
+WORK_IQ_SERVICE_PRINCIPAL_APP_ID = "fdcc1f02-fc51-4226-8753-f668596af7f7"
+WORK_IQ_ADMIN_CONSENT_URL = "https://aka.ms/foundry-iq-work-iq-admin-consent-form"
+
 # ── App Config Loader ───────────────────────────────────────────────────────
 def parse_json_like_setting(value: Any) -> Any:
     if isinstance(value, str) and value.strip().startswith(("{", "[")):
@@ -455,6 +458,112 @@ def cleanup_knowledge_resources(defs: dict, context: dict, cred: ChainedTokenCre
             call_search_api(search_endpoint, get_knowledge_api_version(context), "knowledgesources", ks_name, "delete", cred)
 
 
+def is_work_iq_enabled(context: dict) -> bool:
+    return (
+        str(context.get("RETRIEVAL_BACKEND") or "").lower() == "foundry_iq"
+        and is_truthy_setting(context.get("WORK_IQ_ENABLED"))
+        and bool(str(context.get("WORK_IQ_KNOWLEDGE_SOURCE_NAME") or "").strip())
+    )
+
+
+def check_work_iq_admin_consent(cred: ChainedTokenCredential) -> Optional[bool]:
+    """Soft preflight: check whether the Work IQ service principal has been
+    consented in the caller's tenant.
+
+    Returns True if a servicePrincipal exists for the Work IQ appId (admin
+    consent granted), False if it does not, or None if the check could not be
+    performed (missing Graph permissions, network error, etc.). The check is
+    advisory only: callers must not hard-fail on a missing/failed result.
+    """
+
+    try:
+        token = cred.get_token("https://graph.microsoft.com/.default").token
+    except Exception as exc:  # noqa: BLE001 - preflight must not raise
+        logging.warning(
+            f"⚠️ Could not acquire a Microsoft Graph token to preflight Work IQ admin consent: {exc}"
+        )
+        return None
+
+    url = (
+        "https://graph.microsoft.com/v1.0/servicePrincipals"
+        f"?$filter=appId eq '{WORK_IQ_SERVICE_PRINCIPAL_APP_ID}'&$select=id,appId"
+    )
+    try:
+        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+    except requests.RequestException as exc:
+        logging.warning(f"⚠️ Work IQ admin consent preflight request failed: {exc}")
+        return None
+
+    if resp.status_code == 403:
+        logging.warning(
+            "⚠️ Work IQ admin consent preflight skipped: the current identity cannot read "
+            "Microsoft Graph service principals. Grant Application.Read.All or perform the "
+            "check manually."
+        )
+        return None
+    if resp.status_code >= 400:
+        logging.warning(
+            f"⚠️ Work IQ admin consent preflight returned HTTP {resp.status_code}: {resp.text}"
+        )
+        return None
+
+    try:
+        value = resp.json().get("value") or []
+    except ValueError:
+        logging.warning("⚠️ Work IQ admin consent preflight returned a non-JSON body.")
+        return None
+    return len(value) > 0
+
+
+def log_work_iq_prerequisites_warning() -> None:
+    logging.warning(
+        "⚠️ Work IQ is enabled in configuration but the Work IQ service principal "
+        f"(appId {WORK_IQ_SERVICE_PRINCIPAL_APP_ID}) is not consented in this tenant. "
+        "Skipping Work IQ knowledge source provisioning."
+    )
+    logging.warning(
+        "   Prerequisites: enable the 'EnableFoundryIQWithWorkIQ' feature flag, submit "
+        f"the admin consent form at {WORK_IQ_ADMIN_CONSENT_URL}, and ensure users have a "
+        "Microsoft 365 Copilot license. Re-run the deployment once consent is granted."
+    )
+
+
+def filter_work_iq_sources(defs: dict, context: dict, cred: ChainedTokenCredential) -> None:
+    """When Work IQ is enabled but admin consent has not been granted, remove
+    the Work IQ knowledge source (and its knowledge base reference) so the rest
+    of the provisioning still succeeds. Default deployments (Work IQ disabled)
+    are untouched.
+    """
+
+    if not is_work_iq_enabled(context):
+        return
+
+    work_iq_name = str(context.get("WORK_IQ_KNOWLEDGE_SOURCE_NAME") or "").strip()
+    if not work_iq_name:
+        return
+
+    consented = check_work_iq_admin_consent(cred)
+    if consented is True:
+        logging.info("✅ Work IQ admin consent preflight passed.")
+        return
+
+    if consented is False:
+        log_work_iq_prerequisites_warning()
+    else:
+        logging.warning(
+            "⚠️ Work IQ admin consent preflight was inconclusive; skipping Work IQ "
+            "knowledge source provisioning to avoid a hard failure. Verify consent "
+            f"at {WORK_IQ_ADMIN_CONSENT_URL} and re-run once granted."
+        )
+
+    knowledge_sources = defs.get("knowledgeSources") or []
+    defs["knowledgeSources"] = [ks for ks in knowledge_sources if ks.get("name") != work_iq_name]
+    for kb in defs.get("knowledgeBases") or []:
+        kb["knowledgeSources"] = [
+            ref for ref in kb.get("knowledgeSources") or [] if ref.get("name") != work_iq_name
+        ]
+
+
 def provision_knowledge_sources(defs: dict, context: dict, cred: ChainedTokenCredential, search_endpoint: str):
     """Create or update Foundry IQ knowledge sources.
 
@@ -579,6 +688,7 @@ def execute_setup(defs: Optional[dict], context: dict):
     provision_indexers(defs, context, cred, search_endpoint, api_version)
     
     # Step 3: Provision knowledge base resources (KS -> KB)
+    filter_work_iq_sources(defs, context, cred)
     knowledge_sources_ok = provision_knowledge_sources(defs, context, cred, search_endpoint)
     enforce_private_execution_for_generated_indexers(defs, context, cred, search_endpoint, api_version)
     knowledge_bases_ok = provision_knowledge_bases(defs, context, cred, search_endpoint)

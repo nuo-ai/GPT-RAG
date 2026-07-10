@@ -305,5 +305,208 @@ class FoundryIqTemplateTests(unittest.TestCase):
         )
 
 
+class WorkIqTemplateTests(unittest.TestCase):
+    """Work IQ is opt-in and default-off. Rendered output must be byte-identical
+    to the pre-Work IQ template when the feature is disabled.
+    """
+
+    def _foundry_iq_context(self, **overrides):
+        settings_input = {
+            "RESOURCE_TOKEN": "abc123",
+            "SEARCH_SERVICE_QUERY_ENDPOINT": "https://search.search.windows.net",
+            "AI_FOUNDRY_ACCOUNT_NAME": "aif-abc123",
+            "RETRIEVAL_BACKEND": "foundry_iq",
+        }
+        settings_input.update(overrides)
+        settings = render_json_template("search.settings.j2", settings_input)
+        return settings, {
+            **settings,
+            "STORAGE_ACCOUNT_RESOURCE_ID": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/st",
+            "EMBEDDING_MODEL_INFO": {
+                "endpoint": "https://aif-abc123.openai.azure.com/",
+                "deployment_name": "text-embedding",
+                "model_name": "text-embedding-3-large",
+            },
+            "GPT_MODEL_INFO": {
+                "deployment_name": "chat",
+                "model_name": "gpt-5-nano",
+            },
+        }
+
+    def test_settings_defaults_work_iq_disabled_and_empty_name(self):
+        settings = render_json_template(
+            "search.settings.j2",
+            {
+                "RESOURCE_TOKEN": "abc123",
+                "SEARCH_SERVICE_QUERY_ENDPOINT": "https://search.search.windows.net",
+                "AI_FOUNDRY_ACCOUNT_NAME": "aif-abc123",
+                "RETRIEVAL_BACKEND": "foundry_iq",
+            },
+        )
+        self.assertEqual(settings["WORK_IQ_ENABLED"], "false")
+        self.assertEqual(settings["WORK_IQ_KNOWLEDGE_SOURCE_NAME"], "")
+
+    def test_work_iq_disabled_by_default_produces_no_workiq_entry(self):
+        _, context = self._foundry_iq_context()
+        search_definitions = render_json_template("search.j2", context)
+        for ks in search_definitions["knowledgeSources"]:
+            self.assertNotEqual(ks["kind"], "workIQ")
+        kb_source_names = [
+            s["name"] for s in search_definitions["knowledgeBases"][0]["knowledgeSources"]
+        ]
+        self.assertNotIn("work-iq-ks", kb_source_names)
+
+    def test_work_iq_enabled_without_name_produces_no_workiq_entry(self):
+        _, context = self._foundry_iq_context(WORK_IQ_ENABLED="true")
+        search_definitions = render_json_template("search.j2", context)
+        for ks in search_definitions["knowledgeSources"]:
+            self.assertNotEqual(ks["kind"], "workIQ")
+
+    def test_work_iq_enabled_adds_workiq_knowledge_source_and_kb_reference(self):
+        _, context = self._foundry_iq_context(
+            WORK_IQ_ENABLED="true",
+            WORK_IQ_KNOWLEDGE_SOURCE_NAME="work-iq-ks",
+        )
+        search_definitions = render_json_template("search.j2", context)
+
+        work_iq_sources = [
+            ks for ks in search_definitions["knowledgeSources"] if ks["kind"] == "workIQ"
+        ]
+        self.assertEqual(len(work_iq_sources), 1)
+        work_iq = work_iq_sources[0]
+        self.assertEqual(work_iq["name"], "work-iq-ks")
+        self.assertEqual(work_iq["kind"], "workIQ")
+        self.assertIsNone(work_iq["encryptionKey"])
+        # Work IQ is service-managed. It must not carry a filterAddOn, blob
+        # parameters, or search-index parameters.
+        self.assertNotIn("filterAddOn", work_iq)
+        self.assertNotIn("azureBlobParameters", work_iq)
+        self.assertNotIn("searchIndexParameters", work_iq)
+
+        kb_source_names = [
+            s["name"] for s in search_definitions["knowledgeBases"][0]["knowledgeSources"]
+        ]
+        self.assertIn("work-iq-ks", kb_source_names)
+
+    def test_work_iq_not_added_when_retrieval_backend_is_ai_search(self):
+        settings = render_json_template(
+            "search.settings.j2",
+            {
+                "RESOURCE_TOKEN": "abc123",
+                "SEARCH_SERVICE_QUERY_ENDPOINT": "https://search.search.windows.net",
+                "AI_FOUNDRY_ACCOUNT_NAME": "aif-abc123",
+                "WORK_IQ_ENABLED": "true",
+                "WORK_IQ_KNOWLEDGE_SOURCE_NAME": "work-iq-ks",
+            },
+        )
+        context = {
+            **settings,
+            "STORAGE_ACCOUNT_RESOURCE_ID": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/st",
+            "EMBEDDING_MODEL_INFO": {
+                "endpoint": "https://aif-abc123.openai.azure.com/",
+                "deployment_name": "text-embedding",
+                "model_name": "text-embedding-3-large",
+            },
+            "GPT_MODEL_INFO": {
+                "deployment_name": "chat",
+                "model_name": "gpt-5-nano",
+            },
+        }
+        search_definitions = render_json_template("search.j2", context)
+        # ai_search backend never emits knowledge sources at all.
+        self.assertEqual(search_definitions["knowledgeSources"], [])
+        self.assertEqual(search_definitions["knowledgeBases"], [])
+
+
+class WorkIqPreflightTests(unittest.TestCase):
+    def test_filter_work_iq_sources_no_op_when_disabled(self):
+        defs = {
+            "knowledgeSources": [
+                {"name": "blob-ks", "kind": "azureBlob"},
+            ],
+            "knowledgeBases": [
+                {"name": "kb", "knowledgeSources": [{"name": "blob-ks"}]},
+            ],
+        }
+        setup.filter_work_iq_sources(
+            defs,
+            {"RETRIEVAL_BACKEND": "foundry_iq", "WORK_IQ_ENABLED": "false"},
+            Mock(),
+        )
+        self.assertEqual(defs["knowledgeSources"], [{"name": "blob-ks", "kind": "azureBlob"}])
+        self.assertEqual(defs["knowledgeBases"][0]["knowledgeSources"], [{"name": "blob-ks"}])
+
+    def test_filter_work_iq_sources_removes_source_when_not_consented(self):
+        defs = {
+            "knowledgeSources": [
+                {"name": "blob-ks", "kind": "azureBlob"},
+                {"name": "work-iq-ks", "kind": "workIQ"},
+            ],
+            "knowledgeBases": [
+                {
+                    "name": "kb",
+                    "knowledgeSources": [{"name": "blob-ks"}, {"name": "work-iq-ks"}],
+                }
+            ],
+        }
+        credential = Mock()
+        with patch.object(setup, "check_work_iq_admin_consent", return_value=False):
+            setup.filter_work_iq_sources(
+                defs,
+                {
+                    "RETRIEVAL_BACKEND": "foundry_iq",
+                    "WORK_IQ_ENABLED": "true",
+                    "WORK_IQ_KNOWLEDGE_SOURCE_NAME": "work-iq-ks",
+                },
+                credential,
+            )
+        self.assertEqual([ks["name"] for ks in defs["knowledgeSources"]], ["blob-ks"])
+        self.assertEqual(
+            [ref["name"] for ref in defs["knowledgeBases"][0]["knowledgeSources"]],
+            ["blob-ks"],
+        )
+
+    def test_filter_work_iq_sources_keeps_source_when_consented(self):
+        defs = {
+            "knowledgeSources": [
+                {"name": "work-iq-ks", "kind": "workIQ"},
+            ],
+            "knowledgeBases": [
+                {"name": "kb", "knowledgeSources": [{"name": "work-iq-ks"}]}
+            ],
+        }
+        with patch.object(setup, "check_work_iq_admin_consent", return_value=True):
+            setup.filter_work_iq_sources(
+                defs,
+                {
+                    "RETRIEVAL_BACKEND": "foundry_iq",
+                    "WORK_IQ_ENABLED": "true",
+                    "WORK_IQ_KNOWLEDGE_SOURCE_NAME": "work-iq-ks",
+                },
+                Mock(),
+            )
+        self.assertEqual([ks["name"] for ks in defs["knowledgeSources"]], ["work-iq-ks"])
+
+    def test_filter_work_iq_sources_removes_source_when_preflight_inconclusive(self):
+        defs = {
+            "knowledgeSources": [{"name": "work-iq-ks", "kind": "workIQ"}],
+            "knowledgeBases": [
+                {"name": "kb", "knowledgeSources": [{"name": "work-iq-ks"}]}
+            ],
+        }
+        with patch.object(setup, "check_work_iq_admin_consent", return_value=None):
+            setup.filter_work_iq_sources(
+                defs,
+                {
+                    "RETRIEVAL_BACKEND": "foundry_iq",
+                    "WORK_IQ_ENABLED": "true",
+                    "WORK_IQ_KNOWLEDGE_SOURCE_NAME": "work-iq-ks",
+                },
+                Mock(),
+            )
+        self.assertEqual(defs["knowledgeSources"], [])
+        self.assertEqual(defs["knowledgeBases"][0]["knowledgeSources"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

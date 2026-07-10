@@ -36,6 +36,8 @@
     "FOUNDRY_IQ_FILTER_ADD_ON_ENABLED": "{{FOUNDRY_IQ_FILTER_ADD_ON_ENABLED | default('false')}}",
     "FOUNDRY_IQ_SECURITY_FIELD_NAME": "{{FOUNDRY_IQ_SECURITY_FIELD_NAME | default('metadata_security_id')}}",
     "FOUNDRY_IQ_MAX_OUTPUT_DOCUMENTS": "{{FOUNDRY_IQ_MAX_OUTPUT_DOCUMENTS | default('')}}",
+    "WORK_IQ_ENABLED": "{{WORK_IQ_ENABLED | default('false')}}",
+    "WORK_IQ_KNOWLEDGE_SOURCE_NAME": "{{WORK_IQ_KNOWLEDGE_SOURCE_NAME | default('')}}",
     {% if GPT_MODEL_INFO | default({}) %}
     "GPT_MODEL_DEPLOYMENT_NAME": "{{GPT_MODEL_INFO.deployment_name}}",
     "GPT_MODEL_NAME": "{{GPT_MODEL_INFO.model_name}}"

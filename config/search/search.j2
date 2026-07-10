@@ -2,6 +2,7 @@
 {% set content_understanding_chat_models = ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'gpt-5.2'] %}
 {% set is_content_understanding_chat_model_supported = GPT_MODEL_INFO and GPT_MODEL_INFO.model_name in content_understanding_chat_models %}
 {% set conversation_upload_enabled = RETRIEVAL_BACKEND == 'foundry_iq' and FOUNDRY_IQ_PATTERN != 'searchIndex' and (FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED | default('false') | string | lower) in ['true', '1', 'yes', 'y', 't'] and (FOUNDRY_IQ_CONVERSATION_KNOWLEDGE_SOURCE_NAME | default('', true)) %}
+{% set work_iq_enabled = RETRIEVAL_BACKEND == 'foundry_iq' and (WORK_IQ_ENABLED | default('false') | string | lower) in ['true', '1', 'yes', 'y', 't'] and (WORK_IQ_KNOWLEDGE_SOURCE_NAME | default('', true)) %}
 {
   "indexes": [
     {
@@ -411,6 +412,14 @@
       }
     }
     {% endif %}
+    {% if work_iq_enabled %},
+    {
+      "name": "{{WORK_IQ_KNOWLEDGE_SOURCE_NAME}}",
+      "kind": "workIQ",
+      "description": "Microsoft 365 Work IQ knowledge source (grounds retrieval on the signed-in user's Microsoft 365 context).",
+      "encryptionKey": null
+    }
+    {% endif %}
   ]{% else %}[]{% endif %},
   "knowledgeBases": {% if RETRIEVAL_BACKEND == 'foundry_iq' %}[
     {
@@ -421,7 +430,8 @@
       "outputMode": "extractiveData",
       "knowledgeSources": [
         { "name": "{{FOUNDRY_IQ_KNOWLEDGE_SOURCE_NAME}}" }{% if conversation_upload_enabled %},
-        { "name": "{{FOUNDRY_IQ_CONVERSATION_KNOWLEDGE_SOURCE_NAME}}" }{% endif %}
+        { "name": "{{FOUNDRY_IQ_CONVERSATION_KNOWLEDGE_SOURCE_NAME}}" }{% endif %}{% if work_iq_enabled %},
+        { "name": "{{WORK_IQ_KNOWLEDGE_SOURCE_NAME}}" }{% endif %}
       ],
       "models": [],
       "encryptionKey": null,
