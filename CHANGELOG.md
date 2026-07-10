@@ -1,6 +1,6 @@
 # Changelog
 
-## [v3.3.0] - Unreleased
+## [v3.3.0] - 2026-07-10
 
 ### User and operator impact
 
@@ -8,7 +8,7 @@ Foundry IQ deployments can now optionally include **Microsoft 365 Work IQ** as a
 
 Enabling Work IQ requires a tenant-level prerequisite: the `EnableFoundryIQWithWorkIQ` feature flag, admin consent for the Work IQ service principal (appId `fdcc1f02-fc51-4226-8753-f668596af7f7`) submitted through the [admin consent form](https://aka.ms/foundry-iq-work-iq-admin-consent-form), and a Microsoft 365 Copilot license for end users. See [`Azure/gpt-rag#543`](https://github.com/Azure/gpt-rag/issues/543) for the full proposal. The setup script runs a soft preflight against Microsoft Graph: when Work IQ is enabled but consent has not been granted, the script prints a warning explaining the prerequisites and skips only the Work IQ knowledge source (the rest of the deployment continues), so operators can enable the flag ahead of consent without breaking the environment.
 
-The paired orchestrator change (settings `WORK_IQ_ENABLED`, `WORK_IQ_KNOWLEDGE_SOURCE_NAME`, `FOUNDRY_IQ_MAX_RUNTIME_SECONDS`) ships in a follow-up `gpt-rag-orchestrator` release; the `manifest.json` orchestrator pin will be bumped in a follow-up commit on this branch once that release is tagged.
+The paired orchestrator release [`v3.2.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.2.0) adds the runtime settings `WORK_IQ_ENABLED`, `WORK_IQ_KNOWLEDGE_SOURCE_NAME`, and `FOUNDRY_IQ_MAX_RUNTIME_SECONDS`, plus the reference-normalization seam for remote knowledge source shapes. `manifest.json` is pinned to that release.
 
 ### Added
 
@@ -16,6 +16,21 @@ The paired orchestrator change (settings `WORK_IQ_ENABLED`, `WORK_IQ_KNOWLEDGE_S
 - **New passthrough settings:** `config/search/search.settings.j2` stamps `WORK_IQ_ENABLED` (default `false`) and `WORK_IQ_KNOWLEDGE_SOURCE_NAME` (default `""`) into App Configuration under the `gpt-rag` label, so both new and upgraded environments always carry the keys.
 - **Soft admin-consent preflight:** `config/search/setup.py` gained `check_work_iq_admin_consent` and `filter_work_iq_sources`. When Work IQ is enabled, the setup script probes Microsoft Graph for the Work IQ service principal, logs the enablement prerequisites when consent is missing or the check is inconclusive, and skips just the Work IQ knowledge source instead of failing the deployment.
 - **Template tests:** `config/search/tests/test_foundry_iq_templates.py` now covers Work IQ default-off (no `workIQ` entry emitted), enabled without a name (still no entry), enabled with a name (emits a `workIQ` source with no `filterAddOn` and adds the name to the knowledge base), and Work IQ ignored when `RETRIEVAL_BACKEND` is not `foundry_iq`. The preflight filter is tested for the disabled, consented, not-consented, and inconclusive paths.
+
+### Changed
+
+- **Orchestrator pin bumped to [`v3.2.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.2.0):** carries the Work IQ retrieve support (`kind="workIQ"`), the `maxRuntimeInSeconds` header plumbing (default 120 seconds, overridable via `FOUNDRY_IQ_MAX_RUNTIME_SECONDS`), and the reference-normalization seam for the Work IQ `sourceData` shape.
+
+### Component versions
+
+The following component versions are pinned for this release:
+
+| Component | Version |
+| --- | --- |
+| gpt-rag-ui | v2.3.13 |
+| gpt-rag-orchestrator | v3.2.0 |
+| gpt-rag-ingestion | v2.4.14 |
+| infra / AI Landing Zone | v2.3.0 |
 
 ### Validation
 
