@@ -23,53 +23,13 @@ For full documentation, visit the **[GPT-RAG documentation site](https://azure.g
 
 GPT-RAG is built on a Zero-Trust architecture to ensure that all components operate within a controlled, isolated environment. Network access is tightly governed, and communication between services follows least-privilege principles.
 
-## Network-isolated deployments
+## Getting started
 
-When deploying with `NETWORK_ISOLATION=true`, run `azd provision` from your workstation, then run `scripts/postProvision.ps1` and `azd deploy` from the provisioned jumpbox or another host with VNet access. The deployment hook treats `NETWORK_ISOLATION` as the source of truth: workstation deploys are blocked for isolated environments unless `RUN_FROM_JUMPBOX=true` is set inside the VNet.
+Head to the documentation site for the complete guides:
 
-### Preflight checks
-
-`azd provision` runs two preflight checks before Azure Resource Manager deployment starts:
-
-- **GPT-RAG regional preflight** (`scripts/Invoke-RegionalPreflight.ps1`) reports one `PASS`, `WARN`, or `FAIL` line per check and fails only on deterministic blockers: missing provider registration, unsupported resource locations, insufficient supported quota, or unavailable model deployments.
-- **AI Landing Zone preflight** (`infra/scripts/Invoke-PreflightChecks.ps1`, shipped by the [landing-zone submodule](https://github.com/Azure/bicep-ptn-aiml-landing-zone) at `ailz_tag` v2.0.8 or newer) validates parameter shape and BYO references, then runs its own regional readiness pass.
-
-Transient regional capacity failures (for example AI Search `InsufficientResourcesAvailable` or Cosmos DB `ServiceUnavailable`) cannot be pre-checked by Azure APIs and are handled at deployment time if Azure returns them.
-
-To bypass preflight checks:
-
-- `PREFLIGHT_SKIP=true` bypasses all preflight checks.
-- `GPT_RAG_REGIONAL_PREFLIGHT_SKIP=true` bypasses only the GPT-RAG regional check.
-- `LZ_PREFLIGHT_REGIONAL_SKIP=true` bypasses only the landing-zone regional block.
-
-### Automated and unattended provisioning
-
-For automated workstation provisions, set `AZURE_SKIP_NETWORK_ISOLATION_WARNING=true` so the local post-provision hook skips data-plane work without prompting. Then rerun post-provision from the jumpbox with `RUN_FROM_JUMPBOX=true`.
-
-For unattended provisioning, set `AZURE_SKIP_NETWORK_ISOLATION_WARNING=true` to skip only the provisioning warning prompt. Do not use `AZURE_ZERO_TRUST`; it is no longer part of the deployment flow.
-
-### Container image builds
-
-Component image builds use Azure Container Registry remote builds in isolated environments, so Docker does not need to be installed on the jumpbox. Set `ACR_TASK_AGENT_POOL` to the landing-zone ACR task agent pool name (for example `build-pool`) before deploying from the jumpbox.
-
-## Retrieval backend configuration
-
-GPT-RAG can retrieve documents in two ways:
-
-- **Foundry IQ** (default for fresh v3 deployments): retrieval runs through Foundry IQ knowledge sources. Use it for new deployments.
-- **Azure AI Search** (direct): retrieval hits Azure AI Search directly. Existing deployments can stay on this until they choose to migrate.
-
-To use Foundry IQ, set:
-
-```
-RETRIEVAL_BACKEND=foundry_iq
-FOUNDRY_IQ_PATTERN=azureBlob
-FOUNDRY_IQ_KNOWLEDGE_SOURCE_KIND=azureBlob
-```
-
-To keep using Azure AI Search, set `RETRIEVAL_BACKEND=ai_search`.
-
-For the full operator guide, including how the two Foundry IQ ingestion patterns compare, security modes, `knowledgeRetrieval` billing, rollback, and known limitations, see [Retrieval backend selection](https://azure.github.io/GPT-RAG/howto_retrieval_backend/).
+- **[Deployment Guide](https://azure.github.io/GPT-RAG/deploy/)** covers Basic, Zero Trust, and network-isolated deployments, preflight checks, jumpbox workflow, and container image builds.
+- **[Retrieval Backend Selection](https://azure.github.io/GPT-RAG/howto_retrieval_backend/)** covers Foundry IQ, Azure AI Search, security modes, billing, and rollback.
+- **[What's New](https://azure.github.io/GPT-RAG/whatisnew/)** highlights the notable features added over time.
 
 ## Architecture
 
