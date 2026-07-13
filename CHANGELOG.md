@@ -8,6 +8,34 @@
 
 ### Fixed
 
+## [v3.5.0] - 2026-07-13
+
+### User and operator impact
+
+Ships platform-side support for four net-new Foundry IQ knowledge sources previewed in [orchestrator `v3.5.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.5.0): **SharePoint (remote)** via the Copilot Retrieval API with per-user OBO ACL, **OneLake (indexed)** for native Foundry IQ indexing of Fabric OneLake data, **SharePoint (indexed)** via Microsoft Graph app-only auth against a pre-built AI Search index, and **Web grounding (Bing)** for public internet retrieval scoped by allow/block domain lists. All four sources are OFF by default and gated by their own `*_ENABLED` App Configuration flag plus a knowledge-source name. With the flags off (the default), the rendered search resources, deployed containers, and runtime behavior are identical to `v3.4.3`, so existing environments upgrade with no config change.
+
+Each knowledge source has its own opt-in configuration surface:
+
+- **SharePoint remote:** `SHAREPOINT_REMOTE_ENABLED`, `SHAREPOINT_REMOTE_KNOWLEDGE_SOURCE_NAME`, `SHAREPOINT_REMOTE_FILTER_EXPRESSION_ADD_ON`. ACL enforced natively by SharePoint via forwarded OBO token; managed-identity fallback is never used.
+- **OneLake indexed:** `ONELAKE_KS_ENABLED`, `ONELAKE_KNOWLEDGE_SOURCE_NAME`, `ONELAKE_WORKSPACE_ID`, `ONELAKE_LAKEHOUSE_ID`. Fabric workspace RBAC is a manual prerequisite; the orchestrator does not grant it.
+- **SharePoint indexed:** `SHAREPOINT_INDEXED_ENABLED`, `SHAREPOINT_INDEXED_KNOWLEDGE_SOURCE_NAME`, `SHAREPOINT_INDEXED_INDEX_NAME`, `SHAREPOINT_INDEXED_SITE_URL`, `SHAREPOINT_INDEXED_TENANT_ID`. App-only Graph auth (Sites.Selected preferred).
+- **Web grounding:** `WEB_GROUNDING_ENABLED`, `WEB_GROUNDING_KNOWLEDGE_SOURCE_NAME`, `WEB_GROUNDING_ALLOWED_DOMAINS`, `WEB_GROUNDING_BLOCKED_DOMAINS`. Public data, no ACL, no OBO. Billed per Bing call.
+
+Standard-mode `azd provision` + `postProvision.ps1` now seeds every one of these keys into App Configuration with safe empty/`false` defaults, so provisioning is a no-op for operators who do not opt in.
+
+**Data-egress caveat:** SharePoint remote and OneLake indexed forward user OBO tokens (or app-only credentials in the SharePoint indexed case) to Microsoft services and return grounded content back to the orchestrator. Web grounding queries the public internet via Bing and returns snippets and links. Operators enabling any of these should confirm the data flow is compliant with their tenant's data-boundary and RBAC policies before turning the flag on. Grounded content still ends up in orchestrator responses and, transitively, in downstream telemetry and chat history.
+
+### Added
+
+- **SharePoint remote App Configuration passthrough (`SHAREPOINT_REMOTE_*` keys).** `postProvision.ps1` now seeds three new keys with safe defaults so the orchestrator can wire up SharePoint remote retrieval via the Copilot Retrieval API when the flag is on.
+- **OneLake indexed App Configuration passthrough (`ONELAKE_KS_ENABLED`, `ONELAKE_KNOWLEDGE_SOURCE_NAME`, `ONELAKE_WORKSPACE_ID`, `ONELAKE_LAKEHOUSE_ID`).** `postProvision.ps1` seeds these keys with safe defaults for the OneLake indexed knowledge source.
+- **SharePoint indexed knowledge source template (preview).** `config/search/search.j2` renders the `indexedSharePoint` knowledge source when the flag is on, `config/search/search.settings.j2` exposes the settings block, and `postProvision.ps1` seeds the App Configuration keys.
+- **Web grounding knowledge source template + App Configuration passthrough.** `config/search/search.j2` renders the `web` knowledge source with allow/block domain lists when enabled, `config/search/search.settings.j2` exposes the settings block, and `postProvision.ps1` seeds the App Configuration keys.
+
+### Changed
+
+- **`manifest.json`: orchestrator pin bumped from `v3.4.1` to [`v3.5.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.5.0).** The four new knowledge source retrieve wirings (`remoteSharePoint`, `indexedOneLake`, `indexedSharePoint`, `web`) ship in orchestrator `v3.5.0`; earlier tags do not consume the new App Configuration keys.
+
 ## [v3.4.3] - 2026-07-13
 
 ### User and operator impact
