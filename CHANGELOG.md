@@ -8,6 +8,33 @@
 
 ### Fixed
 
+## [v3.5.1] - 2026-07-15
+
+### User and operator impact
+
+Ships [orchestrator `v3.5.1`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.5.1), which adds Microsoft Entra/MSAL sign-in for the optional admin dashboard at `/dashboard/`. Operators can now require an Entra sign-in and the exact `Admin` app role before dashboard APIs return administrative data. Existing deployments are unchanged unless dashboard authentication is enabled with App Configuration.
+
+### Changed
+
+- **`manifest.json`: orchestrator pin bumped from `v3.5.0` to [`v3.5.1`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.5.1).** The new orchestrator release adds MSAL Authorization Code + PKCE sign-in for the dashboard SPA, API-scoped token acquisition, fail-closed tenant/client configuration, verified token audience validation, and exact `Admin` app-role enforcement.
+
+### Fixed
+
+- **Admin dashboard authentication is now usable end to end.** The dashboard SPA no longer depends on manually injected bearer tokens. It can bootstrap MSAL from `/api/dashboard/auth-config`, sign in with the configured single App Registration, send bearer tokens to protected dashboard APIs, and show clear 401 reauthentication or 403 missing-role states.
+
+### Validation
+
+| Component | Version |
+| --- | --- |
+| gpt-rag-ui | v2.3.13 |
+| gpt-rag-orchestrator | v3.5.1 |
+| gpt-rag-ingestion | v2.4.14 |
+| infra / AI Landing Zone | v2.3.0 |
+
+- `Azure/gpt-rag-orchestrator#260` checks passed before merge.
+- Orchestrator release `v3.5.1` was published from the release commit.
+- Live tenant validation still requires a recreated or selected GPT-RAG validation environment, because the previous dashboard validation resource group is no longer present in the target subscription.
+
 ## [v3.5.0] - 2026-07-13
 
 ### User and operator impact
