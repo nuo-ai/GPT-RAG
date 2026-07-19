@@ -1,12 +1,43 @@
 # Changelog
 
-## [Unreleased]
+## [v3.6.0] - 2026-07-19
+
+### User and operator impact
+
+Adds opt-in provisioning for generic, approved, preconfigured MCP Server knowledge sources, resolving [#567](https://github.com/Azure/GPT-RAG/issues/567) through [GPT-RAG PR #568](https://github.com/Azure/GPT-RAG/pull/568), [docs PR #569](https://github.com/Azure/GPT-RAG/pull/569), and [orchestrator PR #275](https://github.com/Azure/gpt-rag-orchestrator/pull/275). The feature is **Preview and disabled by default**, so existing deployments do not change unless an operator explicitly enables it.
+
+Provisioning from GPT-RAG `v3.6.0` and [orchestrator `v3.7.0`](https://github.com/Azure/gpt-rag-orchestrator/releases/tag/v3.7.0) must be deployed together before enabling MCP. The configuration governs trusted HTTPS endpoints, exact tool allowlists, output parsing, per-source failure behavior, reasoning effort, runtime/output limits, and request-time authentication metadata.
 
 ### Added
 
+- **Generic MCP Server knowledge source template.** Foundry IQ can call allowed tools on one or more operator-approved MCP servers and combine those results with existing knowledge sources. The Search integration uses API `2026-05-01-preview`; Azure Monitor MCP over workspace-based Application Insights is a worked example, not a special product code path.
+- **Fail-closed source validation and canonical configuration.** Provisioning rejects malformed or empty source definitions, duplicate names, untrusted or unsafe endpoints, unsupported tool/output controls, forbidden headers, literal credentials, and invalid runtime limits before any App Configuration or Search write. Disabled configuration remains canonical and byte-identical to the prior rendered behavior.
+- **Secure request-time authentication metadata.** Managed identity, OBO, Key Vault secret-name references, and no-auth mode are supported without rendering credential values into Search resources. Operators must apply least privilege and keep secrets out of source JSON.
+- **Operator controls and rollback.** `FOUNDRY_IQ_MCP_ENABLED=false` remains the default and rollback gate. Trusted-host and tool allowlists, bounded reasoning/runtime/output, explicit parsing, and per-source failure behavior constrain the preview integration.
+
 ### Changed
 
-### Fixed
+- **`manifest.json` now identifies umbrella release `v3.6.0` and pins orchestrator `v3.7.0`.** UI `v2.3.13`, ingestion `v2.4.14`, and infra `v2.3.0` are unchanged.
+
+### Security and operational guidance
+
+MCP tool safety does not guarantee that model-generated arguments are semantically correct. Use only trusted endpoints, exact read-only tool allowlists, bounded queries, least-privilege identities, and auditable server-side enforcement. The Azure Monitor example must retain workspace scope, bounded time ranges and row counts, and generated-KQL review. Production enablement requires a canary against the operator's approved endpoint and credentials.
+
+To roll back, set `FOUNDRY_IQ_MCP_ENABLED=false` and rerun post-provisioning or provisioning. This removes MCP references from the knowledge base and restores disabled planning behavior; an unused top-level Search knowledge-source resource may be deleted separately after confirming that no knowledge base references it.
+
+### Validation
+
+| Component | Version |
+| --- | --- |
+| gpt-rag-ui | v2.3.13 |
+| gpt-rag-orchestrator | v3.7.0 |
+| gpt-rag-ingestion | v2.4.14 |
+| infra / AI Landing Zone | v2.3.0 |
+
+- GPT-RAG configuration and template suites: **109 tests passed, 66 subtests passed**.
+- Orchestrator `v3.7.0`: **457 tests passed, 65 subtests passed**.
+- Python compilation, PowerShell AST/preflight, JSON/manifest/remote-tag checks, canonical fixture compatibility, disabled-byte identity, Bicep build/size gate, strict documentation build, and Pages publication passed.
+- No live Azure MCP end-to-end test was run because no approved MCP endpoint or credentials were available. The release is acceptable because MCP remains Preview, disabled by default, fail-closed, fully regression-tested, and reversible; production enablement still requires an operator-owned canary.
 
 ## [v3.5.1] - 2026-07-15
 
